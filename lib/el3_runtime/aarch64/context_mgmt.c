@@ -238,10 +238,8 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 	 *  required by PSCI specification)
 	 */
 	sctlr_elx = (EP_GET_EE(ep->h.attr) != 0U) ? SCTLR_EE_BIT : 0U;
-	if (GET_RW(ep->spsr) == MODE_RW_64 && (GET_EL(ep->spsr) == MODE_EL1))
+	if (GET_RW(ep->spsr) == MODE_RW_64)
 		sctlr_elx |= SCTLR_EL1_RES1;
-	else if (GET_RW(ep->spsr) == MODE_RW_64 && (GET_EL(ep->spsr) == MODE_EL2))
-		sctlr_elx |= SCTLR_EL2_RES1;
 	else {
 		/*
 		 * If the target execution state is AArch32 then the following
@@ -291,14 +289,7 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 	 * and other EL2 registers are set up by cm_prepare_ns_entry() as they
 	 * are not part of the stored cpu_context.
 	 */
-	if(GET_EL(ep->spsr) == MODE_EL1){
-		write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL1, sctlr_elx);
-	}else if(GET_EL(ep->spsr) == MODE_EL2){
-		write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL2, sctlr_elx);
-	}else{
-		printf("we couldn't get here!\n");
-		assert(0);
-	}
+	write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL1, sctlr_elx);
 
 	/*
 	 * Base the context ACTLR_EL1 on the current value, as it is
@@ -307,11 +298,9 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 	 * problems for processor cores that don't expect certain bits to
 	 * be zero.
 	 */
-	// actlr_elx = read_actlr_el1();
-	// write_ctx_reg((get_el1_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
-
-	actlr_elx = read_actlr_el2();
+	actlr_elx = read_actlr_el1();
 	write_ctx_reg((get_el1_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
+
 	/*
 	 * Populate EL3 state so that we've the right context
 	 * before doing ERET

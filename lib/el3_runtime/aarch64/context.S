@@ -1094,12 +1094,6 @@ func restore_gp_pmcr_pauth_regs
 	ldr	x0, [sp, #CTX_EL3STATE_OFFSET + CTX_PMCR_EL0]
 	msr	pmcr_el0, x0
 2:
-	ldr     x16, =0x6201cac
-	mrs	x17, elr_el3
-        cmp     x17, x16
-        B.EQ    continue_label
-        mov     x17, xzr
-continue_label:
 	ldp	x0, x1, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X0]
 	ldp	x2, x3, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X2]
 	ldp	x4, x5, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X4]
@@ -1214,63 +1208,6 @@ func el3_exit
 	blr	x17
 1:
 #endif
-
-	mrs x17, elr_el3
-	mov x18, xzr
-	orr x18, x18, #(3 << 25)
-	orr x18, x18, #(1 << 21)
-	cmp x17, x18
-	bne next
-	mrs x0, scr_el3
-	orr x0, x0, #(1 << 18)
-	msr scr_el3, x0
-
-	mov x0, #1 << 20
-	msr cptr_el2, x0           /* Enable FP/SIMD at EL2 */
-	isb
-
-	mov x16, xzr
-	mov x16, #0b01001            /* EL2 */
-	orr x16, x16, #(1 << 8)       /* Enable SError and External Abort. */
-	orr x16, x16, #(1 << 7)       /* IRQ interrupt Process state mask. */
-	orr x16, x16, #(1 << 6)       /* FIQ interrupt Process state mask. */
-	orr x16, x16, #(1 << 9)
-	orr x16, x16, #(1 << 10)
-	msr spsr_el3, x16
-	isb
-
-	mov	x1, #(SCTLR_I_BIT | SCTLR_A_BIT | SCTLR_SA_BIT)
-	mrs	x0, sctlr_el2
-	orr	x0, x0, x1
-	orr x0, x0, #(U(1) << 29)
-	orr x0, x0, #(U(1) << 28)
-	orr x0, x0, #(U(1) << 23)
-	orr x0, x0, #(U(1) << 22)
-	orr x0, x0, #(U(1) << 18)
-	orr x0, x0, #(U(1) << 16)
-	orr x0, x0, #(U(1) << 11)
-	orr x0, x0, #(U(1) << 5)
-	orr x0, x0, #(U(1) << 4)
-	msr	sctlr_el2, x0
-	isb
-
-	ldr x0, =0x70738
-	msr scr_el3, x0
-	isb
-
-	mrs x0, ttbr0_el3
-	msr ttbr0_el2, x0
-	isb
-
-
-	mrs x0, hcr_el2		//enable HCR_EL2
-	orr x0, x0, #(1<<34)
-	msr hcr_el2, x0
-	isb
-
-	mov x19, xzr
-
-next:
 	restore_ptw_el1_sys_regs
 
 	/* ----------------------------------------------------------
