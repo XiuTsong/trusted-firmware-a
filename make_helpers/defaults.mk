@@ -24,7 +24,7 @@ ARM_ARCH_FEATURE		:= none
 
 # ARM Architecture major and minor versions: 8.0 by default.
 ARM_ARCH_MAJOR			:= 8
-ARM_ARCH_MINOR			:= 0
+ARM_ARCH_MINOR			:= 4
 
 # Base commit to perform code check on
 BASE_COMMIT			:= origin/master
@@ -281,7 +281,7 @@ V				:= 0
 WARMBOOT_ENABLE_DCACHE_EARLY	:= 0
 
 # Build option to enable/disable the Statistical Profiling Extensions
-ENABLE_SPE_FOR_LOWER_ELS	:= 1
+ENABLE_SPE_FOR_LOWER_ELS	:= 0
 
 # SPE is only supported on AArch64 so disable it on AArch32.
 ifeq (${ARCH},aarch32)

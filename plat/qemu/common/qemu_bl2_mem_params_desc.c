@@ -76,7 +76,7 @@ static bl_mem_params_node_t bl2_mem_params_descs[] = {
 	  SET_STATIC_PARAM_HEAD(ep_info, PARAM_EP, VERSION_2,
 				entry_point_info_t, BL32_EP_ATTRIBS),
 	  .ep_info.pc = BL32_BASE,
-
+	  //.ep_info.spsr = SPSR_64(MODE_EL2, MODE_SP_ELX, DISABLE_ALL_EXCEPTIONS),
 	  SET_STATIC_PARAM_HEAD(image_info, PARAM_EP, VERSION_2,
 				image_info_t, BL32_IMG_ATTRIBS),
 

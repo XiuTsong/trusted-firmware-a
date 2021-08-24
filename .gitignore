@@ -45,3 +45,5 @@ tags
 
 # Node.js
 node_modules/
+*.dump
+*.diff

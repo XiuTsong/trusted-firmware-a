@@ -238,8 +238,10 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 	 *  required by PSCI specification)
 	 */
 	sctlr_elx = (EP_GET_EE(ep->h.attr) != 0U) ? SCTLR_EE_BIT : 0U;
-	if (GET_RW(ep->spsr) == MODE_RW_64)
+	if (GET_RW(ep->spsr) == MODE_RW_64 && (GET_EL(ep->spsr) == MODE_EL1))
 		sctlr_elx |= SCTLR_EL1_RES1;
+	else if (GET_RW(ep->spsr) == MODE_RW_64 && (GET_EL(ep->spsr) == MODE_EL2))
+		sctlr_elx |= SCTLR_EL2_RES1;
 	else {
 		/*
 		 * If the target execution state is AArch32 then the following
@@ -289,7 +291,14 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 	 * and other EL2 registers are set up by cm_prepare_ns_entry() as they
 	 * are not part of the stored cpu_context.
 	 */
-	write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL1, sctlr_elx);
+	if(GET_EL(ep->spsr) == MODE_EL1){
+		write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL1, sctlr_elx);
+	}else if(GET_EL(ep->spsr) == MODE_EL2){
+		write_ctx_reg(get_el1_sysregs_ctx(ctx), CTX_SCTLR_EL2, sctlr_elx);
+	}else{
+		printf("we couldn't get here!\n");
+		assert(0);
+	}
 
 	/*
 	 * Base the context ACTLR_EL1 on the current value, as it is
@@ -298,9 +307,11 @@ void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 	 * problems for processor cores that don't expect certain bits to
 	 * be zero.
 	 */
-	actlr_elx = read_actlr_el1();
-	write_ctx_reg((get_el1_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
+	// actlr_elx = read_actlr_el1();
+	// write_ctx_reg((get_el1_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
 
+	actlr_elx = read_actlr_el2();
+	write_ctx_reg((get_el1_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
 	/*
 	 * Populate EL3 state so that we've the right context
 	 * before doing ERET
@@ -651,6 +662,50 @@ void cm_el1_sysregs_context_save(uint32_t security_state)
 	else
 		PUBLISH_EVENT(cm_exited_normal_world);
 #endif
+}
+
+void cm_el2_sysregs_context_save(uint32_t security_state, uint32_t is_host_only)
+{
+	cpu_context_t *ctx;
+
+	ctx = cm_get_context(security_state);
+	assert(ctx != NULL);
+
+	if (is_host_only) { // only save host context
+		el2_sysregs_context_save_host_only(get_el2_sysregs_ctx(ctx));
+	} else { // save all context related to el2
+		el2_sysregs_context_save(get_el2_sysregs_ctx(ctx));
+	}
+
+#if IMAGE_BL31
+	if (security_state == SECURE)
+		PUBLISH_EVENT(cm_exited_secure_world);
+	else
+		PUBLISH_EVENT(cm_exited_normal_world);
+#endif
+	return;
+}
+
+void cm_el2_sysregs_context_restore(uint32_t security_state, uint32_t is_host_only)
+{
+	cpu_context_t *ctx;
+
+	ctx = cm_get_context(security_state);
+	assert(ctx != NULL);
+
+    if (is_host_only) { // only save host context
+	    el2_sysregs_context_restore_host_only(get_el2_sysregs_ctx(ctx));
+    } else { // save all context related to el2
+	    el2_sysregs_context_restore(get_el2_sysregs_ctx(ctx));
+    }
+
+#if IMAGE_BL31
+	if (security_state == SECURE)
+		PUBLISH_EVENT(cm_entering_secure_world);
+	else
+		PUBLISH_EVENT(cm_entering_normal_world);
+#endif
+	return;
 }
 
 void cm_el1_sysregs_context_restore(uint32_t security_state)

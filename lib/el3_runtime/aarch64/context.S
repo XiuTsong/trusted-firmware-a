@@ -17,6 +17,10 @@
 
 	.global	el1_sysregs_context_save
 	.global	el1_sysregs_context_restore
+	.global	el2_sysregs_context_save
+	.global	el2_sysregs_context_restore
+	.global	el2_sysregs_context_save_host_only
+	.global	el2_sysregs_context_restore_host_only
 #if CTX_INCLUDE_FPREGS
 	.global	fpregs_context_save
 	.global	fpregs_context_restore
@@ -25,6 +29,292 @@
 	.global	restore_gp_pmcr_pauth_regs
 	.global save_and_update_ptw_el1_sys_regs
 	.global	el3_exit
+
+
+
+/* -----------------------------------------------------
+ * The following function strictly follows the AArch64
+ * PCS to use x9-x17 (temporary caller-saved registers)
+ * to save EL2 system register context. It assumes that
+ * 'x0' is pointing to a 'el2_sys_regs' structure where
+ * the register context will be saved.
+ * -----------------------------------------------------
+ */
+func el2_sysregs_context_save_host_only
+//	mrs	x15, sctlr_el2
+//	mrs	x16, actlr_el2
+//	stp	x15, x16, [x0, #CTX_SCTLR_EL2]
+
+	mrs	x10, sp_el2
+	str	x10, [x0, #CTX_SP_EL2]
+
+	mrs	x12, ttbr0_el2
+	mov	x13, xzr
+/*	mrs	x13, vsttbr_el2  		access vsttbr_el2 cause program crush */
+	stp	x12, x13, [x0, #CTX_TTBR0_EL2]
+
+//	mrs	x14, mair_el2
+//	mrs	x15, amair_el2
+//	stp	x14, x15, [x0, #CTX_MAIR_EL2]
+//
+//	mrs	x16, tcr_el2
+//	str	x16, [x0, #CTX_TCR_EL2]
+
+//	mrs	x9, tpidr_el1
+	mrs	x10, tpidr_el2
+	str	x10, [x0, #CTX_TPIDR_EL2]
+
+//	mrs	x13, par_el1
+//	str	x13, [x0, #CTX_PAR_SEL1]
+
+//	mrs	x13, afsr0_el2
+//	str	x13, [x0, #CTX_AFSR0_EL2]
+
+//	mrs	x15, afsr1_el2
+//	mrs	x16, contextidr_el2
+//	stp	x15, x16, [x0, #CTX_AFSR1_EL2]
+
+	mrs	x17, vbar_el2
+	str	x17, [x0, #CTX_VBAR_EL2]
+
+//	mrs	x17, cnthctl_el2
+//	mrs	x9, cnthp_ctl_el2
+//	stp	x17, x9, [x0, #CTX_CNTHCTL_EL2]
+
+//	mrs	x17, cnthp_cval_el2
+//	mrs	x9, cnthp_tval_el2
+//	stp	x17, x9, [x0, #CTX_CNTHP_CVAL_EL2]
+
+//	mrs	x17, cnthv_ctl_el2
+//	mrs	x9, cnthv_cval_el2
+//	stp	x17, x9, [x0, #CTX_CNTHV_CTL_EL2]
+
+//	mrs	x17, cnthv_tval_el2
+//      str     x17, [x0, #CTX_CNTHV_TVAL_EL2]
+	ret
+endfunc el2_sysregs_context_save_host_only
+
+/* -----------------------------------------------------
+ * The following function strictly follows the AArch64
+ * PCS to use x9-x17 (temporary caller-saved registers)
+ * to restore EL2 system register context.  It assumes
+ * that 'x0' is pointing to a 'el2_sys_regs' structure
+ * from where the register context will be restored
+ * -----------------------------------------------------
+ */
+func el2_sysregs_context_restore_host_only
+
+//	ldp	x15, x16, [x0, #CTX_SCTLR_EL2]
+//	msr	sctlr_el2, x15
+//	msr	actlr_el2, x16
+
+	ldr	x10, [x0, #CTX_SP_EL2]
+	msr	sp_el2, x10
+
+	ldp	x12, x13, [x0, #CTX_TTBR0_EL2]
+	msr	ttbr0_el2, x12
+
+//	ldp	x14, x15, [x0, #CTX_MAIR_EL2]
+//	msr	mair_el2, x14
+//	msr	amair_el2, x15
+//
+//	ldr	x16, [x0, #CTX_TCR_EL2]
+//	msr	tcr_el2, x16
+//	msr	tpidr_el0, x17
+
+	ldr	x10, [x0, #CTX_TPIDR_EL2]
+//	msr	tpidr_el1, x9
+	msr	tpidr_el2, x10
+
+//	ldr	x13, [x0, #CTX_PAR_SEL1]
+//	msr	par_el1, x13
+
+//	ldr	x13, [x0, #CTX_AFSR0_EL2]
+//	msr	afsr0_el2, x13
+//
+//	ldp	x15, x16, [x0, #CTX_AFSR1_EL2]
+//	msr	afsr1_el2, x15
+//	msr	contextidr_el2, x16
+
+	ldr	x17, [x0, #CTX_VBAR_EL2]
+	msr	vbar_el2, x17
+
+//	ldp	x17, x9, [x0, #CTX_CNTHCTL_EL2]
+//	msr	cnthctl_el2, x17
+//	msr	cnthp_ctl_el2, x9
+
+//	ldp	x17, x9, [x0, #CTX_CNTHP_CVAL_EL2]
+//	msr	cnthp_cval_el2, x17
+//	msr	cnthp_tval_el2, x9
+
+//	ldp	x17, x9, [x0, #CTX_CNTHV_CTL_EL2]
+//	msr	cnthv_ctl_el2, x17
+//	msr	cnthv_cval_el2, x9
+
+//        ldr     x17, [x0, #CTX_CNTHV_TVAL_EL2]
+//    msr     cnthv_tval_el2, x17
+	/* No explict ISB required here as ERET covers it */
+	ret
+endfunc el2_sysregs_context_restore_host_only
+
+/* -----------------------------------------------------
+ * The following function strictly follows the AArch64
+ * PCS to use x9-x17 (temporary caller-saved registers)
+ * to save EL2 system register context. It assumes that
+ * 'x0' is pointing to a 'el2_sys_regs' structure where
+ * the register context will be saved.
+ * -----------------------------------------------------
+ */
+func el2_sysregs_context_save
+
+	mrs	x9, spsr_el2
+	mrs	x10, elr_el2
+	stp	x9, x10, [x0, #CTX_SPSR_EL2]
+
+	mrs	x15, sctlr_el2
+	mrs	x16, actlr_el2
+	stp	x15, x16, [x0, #CTX_SCTLR_EL2]
+
+	mrs	x17, vsttbr_el2
+	mrs	x9,  vstcr_el2
+	stp	x17, x9, [x0, #CTX_VSTTBR_EL2]
+
+	mrs	x17, vttbr_el2
+	mrs	x9,  vtcr_el2
+	stp	x17, x9, [x0, #CTX_VTTBR_EL2]
+
+	mrs	x10, sp_el2
+	mrs	x11, esr_el2
+	stp	x10, x11, [x0, #CTX_SP_EL2]
+
+	mrs	x12, ttbr0_el2
+	mov	x13, xzr
+/*	mrs	x13, vsttbr_el2  		access vsttbr_el2 cause program crush */
+	stp	x12, x13, [x0, #CTX_TTBR0_EL2]
+
+	mrs	x14, mair_el2
+	mrs	x15, amair_el2
+	stp	x14, x15, [x0, #CTX_MAIR_EL2]
+
+	mrs	x16, tcr_el2
+	mrs	x17, tpidr_el0
+	stp	x16, x17, [x0, #CTX_TCR_EL2]
+
+	mrs	x9, tpidr_el1
+	mrs	x10, tpidr_el2
+	stp	x9, x10, [x0, #CTX_TPIDR_SEL1]
+
+	mrs	x13, par_el1
+	mrs	x14, hpfar_el2
+	stp	x13, x14, [x0, #CTX_PAR_SEL1]
+
+	mrs	x13, far_el2
+	mrs	x14, afsr0_el2
+	stp	x13, x14, [x0, #CTX_FAR_EL2]
+
+	mrs	x15, afsr1_el2
+	mrs	x16, contextidr_el2
+	stp	x15, x16, [x0, #CTX_AFSR1_EL2]
+
+	mrs	x17, vbar_el2
+	mrs	x9, hcr_el2
+	stp	x17, x9, [x0, #CTX_VBAR_EL2]
+
+	mrs	x17, cnthctl_el2
+	mrs	x9, cnthp_ctl_el2
+	stp	x17, x9, [x0, #CTX_CNTHCTL_EL2]
+
+	mrs	x17, cnthp_cval_el2
+	mrs	x9, cnthp_tval_el2
+	stp	x17, x9, [x0, #CTX_CNTHP_CVAL_EL2]
+
+	mrs	x17, cnthv_ctl_el2
+	mrs	x9, cnthv_cval_el2
+	stp	x17, x9, [x0, #CTX_CNTHV_CTL_EL2]
+
+	mrs	x17, cnthv_tval_el2
+        str     x17, [x0, #CTX_CNTHV_TVAL_EL2]
+	ret
+endfunc el2_sysregs_context_save
+
+/* -----------------------------------------------------
+ * The following function strictly follows the AArch64
+ * PCS to use x9-x17 (temporary caller-saved registers)
+ * to restore EL2 system register context.  It assumes
+ * that 'x0' is pointing to a 'el2_sys_regs' structure
+ * from where the register context will be restored
+ * -----------------------------------------------------
+ */
+func el2_sysregs_context_restore
+
+	ldp	x9, x10, [x0, #CTX_SPSR_EL2]
+	msr	spsr_el2, x9
+	msr	elr_el2, x10
+
+	ldp	x15, x16, [x0, #CTX_SCTLR_EL2]
+	msr	sctlr_el2, x15
+	msr	actlr_el2, x16
+
+	ldp	x17, x9, [x0, #CTX_VSTTBR_EL2]
+	msr	vsttbr_el2, x17
+	msr	vstcr_el2, x9
+
+	ldp	x17, x9, [x0, #CTX_VTTBR_EL2]
+	msr	vttbr_el2, x17
+	msr	vtcr_el2, x9
+
+	ldp	x10, x11, [x0, #CTX_SP_EL2]
+	msr	sp_el2, x10
+	msr	esr_el2, x11
+
+	ldp	x12, x13, [x0, #CTX_TTBR0_EL2]
+	msr	ttbr0_el2, x12
+
+	ldp	x14, x15, [x0, #CTX_MAIR_EL2]
+	msr	mair_el2, x14
+	msr	amair_el2, x15
+
+	ldp	x16, x17, [x0, #CTX_TCR_EL2]
+	msr	tcr_el2, x16
+	msr	tpidr_el0, x17
+
+	ldp	x9, x10, [x0, #CTX_TPIDR_SEL1]
+	msr	tpidr_el1, x9
+	msr	tpidr_el2, x10
+
+	ldp	x13, x14, [x0, #CTX_PAR_SEL1]
+	msr	par_el1, x13
+	msr	hpfar_el2, x14
+
+	ldp	x13, x14, [x0, #CTX_FAR_EL2]
+	msr	far_el2, x13
+	msr	afsr0_el2, x14
+
+	ldp	x15, x16, [x0, #CTX_AFSR1_EL2]
+	msr	afsr1_el2, x15
+	msr	contextidr_el2, x16
+
+	ldp	x17, x9, [x0, #CTX_VBAR_EL2]
+	msr	vbar_el2, x17
+	msr	hcr_el2, x9
+
+	ldp	x17, x9, [x0, #CTX_CNTHCTL_EL2]
+	msr	cnthctl_el2, x17
+	msr	cnthp_ctl_el2, x9
+
+	ldp	x17, x9, [x0, #CTX_CNTHP_CVAL_EL2]
+	msr	cnthp_cval_el2, x17
+	msr	cnthp_tval_el2, x9
+
+	ldp	x17, x9, [x0, #CTX_CNTHV_CTL_EL2]
+	msr	cnthv_ctl_el2, x17
+	msr	cnthv_cval_el2, x9
+
+        ldr     x17, [x0, #CTX_CNTHV_TVAL_EL2]
+        msr     cnthv_tval_el2, x17
+	/* No explict ISB required here as ERET covers it */
+	ret
+endfunc el2_sysregs_context_restore
 
 #if CTX_INCLUDE_EL2_REGS
 
@@ -251,6 +541,7 @@ func el2_sysregs_context_restore
 
 	ldp	x9, x10, [x0, #CTX_ICH_HCR_EL2]
 	msr	ICH_HCR_EL2, x9
+	orr	x10, x10, 0x3
 	msr	ICH_VMCR_EL2, x10
 
 	ldp	x11, x12, [x0, #CTX_MAIR_EL2]
@@ -803,6 +1094,12 @@ func restore_gp_pmcr_pauth_regs
 	ldr	x0, [sp, #CTX_EL3STATE_OFFSET + CTX_PMCR_EL0]
 	msr	pmcr_el0, x0
 2:
+	ldr     x16, =0x6201cac
+	mrs	x17, elr_el3
+        cmp     x17, x16
+        B.EQ    continue_label
+        mov     x17, xzr
+continue_label:
 	ldp	x0, x1, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X0]
 	ldp	x2, x3, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X2]
 	ldp	x4, x5, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X4]
@@ -899,6 +1196,14 @@ func el3_exit
 	msr	spsr_el3, x16
 	msr	elr_el3, x17
 
+	/* We have to set ICC_SRE_EL1 after setting scr_el3
+	 * Otherwises, setting scr_el3.NS to 0 would set ICC_SRE_EL1.SRE to 1
+	 */
+	ldr	x18, [sp, #CTX_EL1SRE_OFFSET]
+	cbz 	x18, 1f
+	msr 	ICC_SRE_EL1, x18
+
+1:
 #if IMAGE_BL31 && DYNAMIC_WORKAROUND_CVE_2018_3639
 	/* ----------------------------------------------------------
 	 * Restore mitigation state as it was on entry to EL3
@@ -909,6 +1214,63 @@ func el3_exit
 	blr	x17
 1:
 #endif
+
+	mrs x17, elr_el3
+	mov x18, xzr
+	orr x18, x18, #(3 << 25)
+	orr x18, x18, #(1 << 21)
+	cmp x17, x18
+	bne next
+	mrs x0, scr_el3
+	orr x0, x0, #(1 << 18)
+	msr scr_el3, x0
+
+	mov x0, #1 << 20
+	msr cptr_el2, x0           /* Enable FP/SIMD at EL2 */
+	isb
+
+	mov x16, xzr
+	mov x16, #0b01001            /* EL2 */
+	orr x16, x16, #(1 << 8)       /* Enable SError and External Abort. */
+	orr x16, x16, #(1 << 7)       /* IRQ interrupt Process state mask. */
+	orr x16, x16, #(1 << 6)       /* FIQ interrupt Process state mask. */
+	orr x16, x16, #(1 << 9)
+	orr x16, x16, #(1 << 10)
+	msr spsr_el3, x16
+	isb
+
+	mov	x1, #(SCTLR_I_BIT | SCTLR_A_BIT | SCTLR_SA_BIT)
+	mrs	x0, sctlr_el2
+	orr	x0, x0, x1
+	orr x0, x0, #(U(1) << 29)
+	orr x0, x0, #(U(1) << 28)
+	orr x0, x0, #(U(1) << 23)
+	orr x0, x0, #(U(1) << 22)
+	orr x0, x0, #(U(1) << 18)
+	orr x0, x0, #(U(1) << 16)
+	orr x0, x0, #(U(1) << 11)
+	orr x0, x0, #(U(1) << 5)
+	orr x0, x0, #(U(1) << 4)
+	msr	sctlr_el2, x0
+	isb
+
+	ldr x0, =0x70738
+	msr scr_el3, x0
+	isb
+
+	mrs x0, ttbr0_el3
+	msr ttbr0_el2, x0
+	isb
+
+
+	mrs x0, hcr_el2		//enable HCR_EL2
+	orr x0, x0, #(1<<34)
+	msr hcr_el2, x0
+	isb
+
+	mov x19, xzr
+
+next:
 	restore_ptw_el1_sys_regs
 
 	/* ----------------------------------------------------------
