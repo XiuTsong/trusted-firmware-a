@@ -335,8 +335,22 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		/* Set appropriate entry for SMC.
 		*/
 		if (is_kvm_trap == 1) {
-			cm_set_elr_el3(SECURE, (uint64_t)
-					&titanium_vector_table->kvm_trap_smc_entry);
+			switch (smc_imm) {
+				case SMC_IMM_KVM_TO_TITANIUM_TRAP:
+					cm_set_elr_el3(SECURE, (uint64_t)
+						&titanium_vector_table->kvm_trap_smc_entry);
+					break;
+				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_REGISTER:
+					cm_set_elr_el3(SECURE, (uint64_t)
+						&titanium_vector_table->kvm_shared_memory_register_entry);
+					break;
+				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_HANDLE:
+					cm_set_elr_el3(SECURE, (uint64_t)
+						&titanium_vector_table->kvm_shared_memory_handle_entry);
+					break;
+				default:
+					panic();
+			}
 		} else if (GET_SMC_TYPE(smc_fid) == SMC_TYPE_FAST) {
 			cm_set_elr_el3(SECURE, (uint64_t)
 					&titanium_vector_table->fast_smc_entry);
@@ -355,7 +369,17 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		cm_set_next_eret_context(SECURE);
 
 		if (is_kvm_trap == 1) {
-			memcpy(get_gpregs_ctx(&titanium_ctx->cpu_ctx), get_gpregs_ctx(handle), sizeof(gp_regs_t));
+			switch (smc_imm) {
+				case SMC_IMM_KVM_TO_TITANIUM_TRAP:
+				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_REGISTER:
+					memcpy(get_gpregs_ctx(&titanium_ctx->cpu_ctx),
+						get_gpregs_ctx(handle), sizeof(gp_regs_t));
+					break;
+				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_HANDLE:
+					break;
+				default:
+					panic();
+			}
 
 			SMC_RET0(&titanium_ctx->cpu_ctx);
 		} else {
@@ -401,10 +425,20 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		/* Restore non-secure state */
 		cm_el2_sysregs_context_restore(NON_SECURE, 1);
 		cm_set_next_eret_context(NON_SECURE);
+		switch (smc_imm) {
+			case SMC_IMM_TITANIUM_TO_KVM_TRAP_SYNC: case SMC_IMM_TITANIUM_TO_KVM_TRAP_IRQ:
+				memcpy(get_gpregs_ctx(ns_cpu_context), get_gpregs_ctx(handle), sizeof(gp_regs_t));
+				cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_vbar_el2(NON_SECURE) + (8+exit_value) * 0x80);//skip the first eight handler
+				break;
+			case SMC_IMM_TITANIUM_TO_KVM_SHARED_MEMORY:
+				printf("jump away from save titanium registers\n");
+				printf("jump away from redirect elr registers to vbar addr\n");
+				break;
+			default:
+				panic();
+		}
 
-		memcpy(get_gpregs_ctx(ns_cpu_context), get_gpregs_ctx(handle), sizeof(gp_regs_t));
 //		cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_elr_el3(NON_SECURE));
-		cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_vbar_el2(NON_SECURE) + (8+exit_value) * 0x80);//skip the first eight handler
 		SMC_RET0(ns_cpu_context);
 	}
 

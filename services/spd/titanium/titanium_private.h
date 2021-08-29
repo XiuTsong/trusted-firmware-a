@@ -85,12 +85,22 @@
 
 #include <lib/cassert.h>
 
+#define SMC_IMM_KVM_TO_TITANIUM_TRAP 0x1
+#define SMC_IMM_TITANIUM_TO_KVM_TRAP_SYNC 0x1
+#define SMC_IMM_TITANIUM_TO_KVM_TRAP_IRQ 0x2
+#define SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_REGISTER 0x10
+#define SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_HANDLE 0x18
+#define SMC_IMM_TITANIUM_TO_KVM_SHARED_MEMORY 0x10
+
+
 typedef uint32_t titanium_vector_isn_t;
 
 typedef struct titanium_vectors {
 	titanium_vector_isn_t yield_smc_entry;
 	titanium_vector_isn_t fast_smc_entry;
 	titanium_vector_isn_t kvm_trap_smc_entry;
+	titanium_vector_isn_t kvm_shared_memory_register_entry;
+	titanium_vector_isn_t kvm_shared_memory_handle_entry;
 	titanium_vector_isn_t cpu_on_entry;
 	titanium_vector_isn_t cpu_off_entry;
 	titanium_vector_isn_t cpu_resume_entry;
