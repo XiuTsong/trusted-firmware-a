@@ -431,8 +431,8 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 				cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_vbar_el2(NON_SECURE) + (8+exit_value) * 0x80);//skip the first eight handler
 				break;
 			case SMC_IMM_TITANIUM_TO_KVM_SHARED_MEMORY:
-				printf("jump away from save titanium registers\n");
-				printf("jump away from redirect elr registers to vbar addr\n");
+				//printf("jump away from save titanium registers\n");
+				//printf("jump away from redirect elr registers to vbar addr\n");
 				break;
 			default:
 				panic();
