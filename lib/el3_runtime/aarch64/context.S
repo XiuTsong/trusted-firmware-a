@@ -57,8 +57,8 @@ func el2_sysregs_context_save_host_only
 //	mrs	x15, amair_el2
 //	stp	x14, x15, [x0, #CTX_MAIR_EL2]
 //
-//	mrs	x16, tcr_el2
-//	str	x16, [x0, #CTX_TCR_EL2]
+	mrs	x16, tcr_el2
+	str	x16, [x0, #CTX_TCR_EL2]
 
 //	mrs	x9, tpidr_el1
 	mrs	x10, tpidr_el2
@@ -118,8 +118,8 @@ func el2_sysregs_context_restore_host_only
 //	msr	mair_el2, x14
 //	msr	amair_el2, x15
 //
-//	ldr	x16, [x0, #CTX_TCR_EL2]
-//	msr	tcr_el2, x16
+	ldr	x16, [x0, #CTX_TCR_EL2]
+	msr	tcr_el2, x16
 //	msr	tpidr_el0, x17
 
 	ldr	x10, [x0, #CTX_TPIDR_EL2]
