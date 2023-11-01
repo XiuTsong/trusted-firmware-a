@@ -27,6 +27,7 @@
 #include <plat/common/platform.h>
 #include <tools_share/uuid.h>
 
+#include "common/ep_info.h"
 #include "titanium_private.h"
 #include "teesmc_titanium.h"
 #include "teesmc_titanium_macros.h"
@@ -117,7 +118,11 @@ static uint64_t titanium_sel2_interrupt_handler(uint32_t id,
 	assert(handle == cm_get_context(NON_SECURE));
 
 	/* Save the non-secure context before entering the TITANIUM */
+#ifndef DISABLE_SEL2
 	cm_el2_sysregs_context_save(NON_SECURE, 0);
+#else
+	cm_el1_sysregs_context_save(NON_SECURE);
+#endif
 
 	/* Get a reference to this cpu's TITANIUM context */
 	linear_id = plat_my_core_pos();
@@ -125,7 +130,11 @@ static uint64_t titanium_sel2_interrupt_handler(uint32_t id,
 	assert(&titanium_ctx->cpu_ctx == cm_get_context(SECURE));
 
 	cm_set_elr_el3(SECURE, (uint64_t)&titanium_vector_table->fiq_entry);
+#ifndef DISABLE_SEL2
 	cm_el2_sysregs_context_restore(SECURE, 0);
+#else
+	cm_el1_sysregs_context_restore(SECURE);
+#endif
 	cm_set_next_eret_context(SECURE);
 
 	/*read_actlr_el2
@@ -207,6 +216,25 @@ static int32_t titanium_setup(void)
 	return 0;
 }
 
+#ifdef DISABLE_SEL2
+static inline void cleanup_el1_sys_registers() {
+	/* clean up all el1 registertcrs */
+	__asm__ volatile ("msr spsr_el1, xzr");
+	__asm__ volatile ("msr elr_el1, xzr");
+	__asm__ volatile ("msr sctlr_el1, xzr");
+	// __asm__ volatile ("msr sp_el1, xzr");
+	// __asm__ volatile ("msr sp_el0, xzr");
+	// __asm__ volatile ("msr esr_el1, xzr");
+	__asm__ volatile ("msr vbar_el1, xzr");
+	__asm__ volatile ("msr ttbr0_el1, xzr");
+	__asm__ volatile ("msr ttbr1_el1, xzr");
+	__asm__ volatile ("msr mair_el1, xzr");
+	__asm__ volatile ("msr amair_el1, xzr");
+	__asm__ volatile ("msr tcr_el1, xzr");
+	__asm__ volatile ("msr tpidr_el1, xzr");
+}
+#endif
+
 /*******************************************************************************
  * This function passes control to the TITANIUM image (BL32) for the first time
  * on the primary cpu after a cold boot. It assumes that a valid secure
@@ -246,6 +274,9 @@ static int32_t titanium_init(void)
 	scr_el3 &= ~SCR_IRQ_BIT;  //do not trap RIQ to el3
 	write_scr(scr_el3);
 
+#ifdef DISABLE_SEL2
+	cleanup_el1_sys_registers();
+#endif
 	//plat_ic_set_interrupt_type(27, INTR_TYPE_S_EL1);
 	/*
 	 * Arrange for an entry into TITANIUM. It will be returned via
@@ -305,7 +336,12 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		assert(handle == cm_get_context(NON_SECURE));
 
 		if (is_kvm_trap == 1) {
+
+#ifndef DISABLE_SEL2
 			cm_el2_sysregs_context_save(NON_SECURE, 1);
+#else
+			cm_el1_sysregs_context_save(NON_SECURE);
+#endif
 
 			icc_sre_el1 = (uint32_t)read_icc_sre_el1();
 			icc_sre_el1 &= ~(1UL);  //clear SRE bit
@@ -314,7 +350,11 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 
 		} else {
 			cm_set_sre_el1(SECURE, 0);
+#ifndef DISABLE_SEL2
 			cm_el2_sysregs_context_save(NON_SECURE, 0);
+#else
+			cm_el1_sysregs_context_save(NON_SECURE);
+#endif
 		}
 
 		/*
@@ -359,12 +399,15 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 					&titanium_vector_table->yield_smc_entry);
 		}
 
-		//cm_el1_sysregs_context_restore(SECURE);
+#ifndef DISABLE_SEL2
 		if (is_kvm_trap == 1) {
 			cm_el2_sysregs_context_restore(SECURE, 1);
 		} else {
 			cm_el2_sysregs_context_restore(SECURE, 0);
 		}
+#else
+		cm_el1_sysregs_context_restore(SECURE);
+#endif
 
 		cm_set_next_eret_context(SECURE);
 
@@ -413,7 +456,12 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 	cm_set_sre_el1(NON_SECURE, 0);
 
 	if (is_kvm_trap == 1) {
+
+#ifndef DISABLE_SEL2
 		cm_el2_sysregs_context_save(SECURE, 1);
+#else
+		cm_el1_sysregs_context_save(SECURE);
+#endif
 
 		/* Get a reference to the non-secure context */
 		ns_cpu_context = cm_get_context(NON_SECURE);
@@ -423,7 +471,12 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		cm_set_sre_el1(NON_SECURE, 0);
 
 		/* Restore non-secure state */
+
+#ifndef DISABLE_SEL2
 		cm_el2_sysregs_context_restore(NON_SECURE, 1);
+#else
+		cm_el1_sysregs_context_restore(NON_SECURE);
+#endif
 		cm_set_next_eret_context(NON_SECURE);
 		switch (smc_imm) {
 			case SMC_IMM_TITANIUM_TO_KVM_TRAP_SYNC: case SMC_IMM_TITANIUM_TO_KVM_TRAP_IRQ:
@@ -532,14 +585,24 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			 * and return to the non-secure state.
 			 */
 			assert(handle == cm_get_context(SECURE));
+
+#ifndef DISABLE_SEL2
 			cm_el2_sysregs_context_save(SECURE, 0);
+#else
+			cm_el1_sysregs_context_save(SECURE);
+#endif
 
 			/* Get a reference to the non-secure context */
 			ns_cpu_context = cm_get_context(NON_SECURE);
 			assert(ns_cpu_context);
 
 			/* Restore non-secure state */
+
+#ifndef DISABLE_SEL2
 			cm_el2_sysregs_context_restore(NON_SECURE, 0);
+#else
+			cm_el1_sysregs_context_restore(NON_SECURE);
+#endif
 			cm_set_next_eret_context(NON_SECURE);
 
 			SMC_RET4(ns_cpu_context, x1, x2, x3, x4);
@@ -558,8 +621,12 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			 * secure system register context since TITANIUM was supposed
 			 * to preserve it during S-EL1 interrupt handling.
 			 */
-			cm_el2_sysregs_context_restore(NON_SECURE, 0);
+
+#ifndef DISABLE_SEL2
+			cm_el1_sysregs_context_restore(NON_SECURE);
+#else
 			cm_set_next_eret_context(NON_SECURE);
+#endif
 
 			SMC_RET0((uint64_t) ns_cpu_context);
 

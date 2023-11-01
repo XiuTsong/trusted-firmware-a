@@ -57,10 +57,13 @@ void titanium_init_titanium_ep_state(struct entry_point_info *titanium_entry_poi
 	titanium_entry_point->pc = pc;
 	if (rw == TITANIUM_AARCH64){
 		printf("register width: 64\n");
-		// titanium_entry_point->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
-		// 				  DISABLE_ALL_EXCEPTIONS);
+#ifndef DISABLE_SEL2
+		titanium_entry_point->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+						  DISABLE_ALL_EXCEPTIONS);
+#else
 		titanium_entry_point->spsr = SPSR_64(MODE_EL1, MODE_SP_ELX,
 						  DISABLE_ALL_EXCEPTIONS);
+#endif
 	}
 	else{
 		printf("register width: 32\n");
@@ -81,23 +84,6 @@ void titanium_init_titanium_ep_state(struct entry_point_info *titanium_entry_poi
 	titanium_entry_point->args.arg2 = dt_addr;
 }
 
-static void cleanup_el1_sys_registers() {
-	/* clean up all el1 registertcrs */
-	__asm__ volatile ("msr spsr_el1, xzr");
-	__asm__ volatile ("msr elr_el1, xzr");
-	__asm__ volatile ("msr sctlr_el1, xzr");
-	__asm__ volatile ("msr sp_el1, xzr");
-	// __asm__ volatile ("msr sp_el0, xzr");
-	__asm__ volatile ("msr esr_el1, xzr");
-	__asm__ volatile ("msr vbar_el1, xzr");
-	__asm__ volatile ("msr ttbr0_el1, xzr");
-	__asm__ volatile ("msr ttbr1_el1, xzr");
-	__asm__ volatile ("msr mair_el1, xzr");
-	__asm__ volatile ("msr amair_el1, xzr");
-	__asm__ volatile ("msr tcr_el1, xzr");
-	__asm__ volatile ("msr tpidr_el1, xzr");
-}
-
 /*******************************************************************************
  * This function takes an TITANIUM context pointer and:
  * 1. Applies the S-EL2 system register context from titanium_ctx->cpu_ctx.
@@ -115,11 +101,11 @@ uint64_t titanium_synchronous_sp_entry(titanium_context_t *titanium_ctx)
 
 	/* Apply the Secure EL2 system register context and switch to it */
 	assert(cm_get_context(SECURE) == &titanium_ctx->cpu_ctx);
-	cm_el2_sysregs_context_restore(SECURE, 0);
 	cm_set_next_eret_context(SECURE);
+#ifndef DISABLE_SEL2
+	cm_el2_sysregs_context_restore(SECURE, 0);
+#endif
 
-	cleanup_el1_sys_registers();
-	
 	rc = titanium_enter_sp(&titanium_ctx->c_rt_ctx);
 #if ENABLE_ASSERTIONS
 	titanium_ctx->c_rt_ctx = 0;
@@ -142,7 +128,11 @@ void titanium_synchronous_sp_exit(titanium_context_t *titanium_ctx, uint64_t ret
 	assert(titanium_ctx != NULL);
 	/* Save the Secure EL2 system register context */
 	assert(cm_get_context(SECURE) == &titanium_ctx->cpu_ctx);
+#ifndef DISABLE_SEL2
 	cm_el2_sysregs_context_save(SECURE, 0);
+#else
+	cm_el1_sysregs_context_save(SECURE);
+#endif
 
 	assert(titanium_ctx->c_rt_ctx != 0);
 	titanium_exit_sp(titanium_ctx->c_rt_ctx, ret);

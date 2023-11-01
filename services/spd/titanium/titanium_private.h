@@ -119,6 +119,8 @@ typedef struct titanium_vectors {
 /* AArch64 callee saved general purpose register context structure. */
 DEFINE_REG_STRUCT(c_rt_regs, TITANIUM_C_RT_CTX_ENTRIES);
 
+#define DISABLE_SEL2
+
 /*
  * Compile time assertion to ensure that both the compiler and linker
  * have the same double word aligned view of the size of the C runtime
