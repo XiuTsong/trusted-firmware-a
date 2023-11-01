@@ -57,7 +57,9 @@ void titanium_init_titanium_ep_state(struct entry_point_info *titanium_entry_poi
 	titanium_entry_point->pc = pc;
 	if (rw == TITANIUM_AARCH64){
 		printf("register width: 64\n");
-		titanium_entry_point->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+		// titanium_entry_point->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+		// 				  DISABLE_ALL_EXCEPTIONS);
+		titanium_entry_point->spsr = SPSR_64(MODE_EL1, MODE_SP_ELX,
 						  DISABLE_ALL_EXCEPTIONS);
 	}
 	else{
@@ -79,6 +81,23 @@ void titanium_init_titanium_ep_state(struct entry_point_info *titanium_entry_poi
 	titanium_entry_point->args.arg2 = dt_addr;
 }
 
+static void cleanup_el1_sys_registers() {
+	/* clean up all el1 registertcrs */
+	__asm__ volatile ("msr spsr_el1, xzr");
+	__asm__ volatile ("msr elr_el1, xzr");
+	__asm__ volatile ("msr sctlr_el1, xzr");
+	__asm__ volatile ("msr sp_el1, xzr");
+	// __asm__ volatile ("msr sp_el0, xzr");
+	__asm__ volatile ("msr esr_el1, xzr");
+	__asm__ volatile ("msr vbar_el1, xzr");
+	__asm__ volatile ("msr ttbr0_el1, xzr");
+	__asm__ volatile ("msr ttbr1_el1, xzr");
+	__asm__ volatile ("msr mair_el1, xzr");
+	__asm__ volatile ("msr amair_el1, xzr");
+	__asm__ volatile ("msr tcr_el1, xzr");
+	__asm__ volatile ("msr tpidr_el1, xzr");
+}
+
 /*******************************************************************************
  * This function takes an TITANIUM context pointer and:
  * 1. Applies the S-EL2 system register context from titanium_ctx->cpu_ctx.
@@ -98,6 +117,8 @@ uint64_t titanium_synchronous_sp_entry(titanium_context_t *titanium_ctx)
 	assert(cm_get_context(SECURE) == &titanium_ctx->cpu_ctx);
 	cm_el2_sysregs_context_restore(SECURE, 0);
 	cm_set_next_eret_context(SECURE);
+
+	cleanup_el1_sys_registers();
 	
 	rc = titanium_enter_sp(&titanium_ctx->c_rt_ctx);
 #if ENABLE_ASSERTIONS
