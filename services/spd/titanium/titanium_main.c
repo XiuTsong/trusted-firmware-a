@@ -288,6 +288,40 @@ static int32_t titanium_init(void)
 	return rc;
 }
 
+#ifdef DISABLE_SEL2
+static void pass_el2_return_state_to_el1(titanium_context_t *titanium_ctx) {
+	uint64_t elr_el2 = read_elr_el2();
+	uint64_t spsr_el2 = read_spsr_el2();
+	/* Restore pc & pstate to ELR_EL1 * SPSR_EL1 */
+	write_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx),
+			CTX_ELR_EL1,
+			elr_el2);
+	// printf("ELR_EL2: %llx\n", elr_el2);
+	// printf("ELR_EL1: %llx\n", read_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ELR_EL1));
+	write_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx),
+			CTX_SPSR_EL1,
+			spsr_el2);
+	// printf("SPSR_EL1: %llx\n", read_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_SPSR_EL1));
+	// printf("SPSR_EL2: %llx\n", spsr_el2);
+}
+
+static void pass_el1_return_state_to_el2(titanium_context_t *titanium_ctx) {
+	uint64_t elr_el1 = read_elr_el1();
+	uint64_t spsr_el1 = read_spsr_el1();
+	/* Restore pc & pstate to ELR_EL1 * SPSR_EL1 */
+	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
+			CTX_ELR_EL2,
+			elr_el1);
+	// printf("ELR_EL1: %llx\n", elr_el1);
+	// printf("ELR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ELR_EL2));
+	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
+			CTX_SPSR_EL2,
+			spsr_el1);
+	// printf("SPSR_EL1: %llx\n", spsr_el1);
+	// printf("SPSR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_SPSR_EL2));
+}
+#endif
+
 long enter_titanium_count = 0;
 long leave_titanium_count = 0;
 /*******************************************************************************
@@ -406,6 +440,9 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			cm_el2_sysregs_context_restore(SECURE, 0);
 		}
 #else
+		if (smc_imm == SMC_IMM_KVM_TO_TITANIUM_TRAP) {
+			pass_el2_return_state_to_el1(titanium_ctx);
+		}
 		cm_el1_sysregs_context_restore(SECURE);
 #endif
 
@@ -461,6 +498,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		cm_el2_sysregs_context_save(SECURE, 1);
 #else
 		cm_el1_sysregs_context_save(SECURE);
+		pass_el1_return_state_to_el2(titanium_ctx);
 #endif
 
 		/* Get a reference to the non-secure context */
