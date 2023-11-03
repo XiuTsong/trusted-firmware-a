@@ -292,12 +292,15 @@ static int32_t titanium_init(void)
 static void pass_el2_return_state_to_el1(titanium_context_t *titanium_ctx) {
 	uint64_t elr_el2 = read_elr_el2();
 	uint64_t spsr_el2 = read_spsr_el2();
-	/* Restore pc & pstate to ELR_EL1 * SPSR_EL1 */
+
+	/* Pass ELR_EL2 to ELR_EL1 */
 	write_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx),
 			CTX_ELR_EL1,
 			elr_el2);
 	// printf("ELR_EL2: %llx\n", elr_el2);
 	// printf("ELR_EL1: %llx\n", read_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ELR_EL1));
+
+	/* Pass SPSR_EL2 to SPSR_EL1 */
 	write_ctx_reg(get_el1_sysregs_ctx(&titanium_ctx->cpu_ctx),
 			CTX_SPSR_EL1,
 			spsr_el2);
@@ -308,17 +311,38 @@ static void pass_el2_return_state_to_el1(titanium_context_t *titanium_ctx) {
 static void pass_el1_return_state_to_el2(titanium_context_t *titanium_ctx) {
 	uint64_t elr_el1 = read_elr_el1();
 	uint64_t spsr_el1 = read_spsr_el1();
-	/* Restore pc & pstate to ELR_EL1 * SPSR_EL1 */
+
+	/* Pass ELR_EL1 to ELR_EL2 */
 	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
 			CTX_ELR_EL2,
 			elr_el1);
 	// printf("ELR_EL1: %llx\n", elr_el1);
 	// printf("ELR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ELR_EL2));
+
+	/* Pass SPSR_EL1 to SPSR_EL2 */
 	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
 			CTX_SPSR_EL2,
 			spsr_el1);
 	// printf("SPSR_EL1: %llx\n", spsr_el1);
 	// printf("SPSR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_SPSR_EL2));
+}
+
+static void pass_el1_fault_state_to_el2(titanium_context_t *titanium_ctx) {
+	uint64_t esr_el1 = read_esr_el1();
+	uint64_t far_el1 = read_far_el1();
+
+	/* Pass ESR_EL1 to ESR_EL2 */
+	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
+			CTX_ESR_EL2,
+			esr_el1);
+	printf("ESR_EL1: %llx\n", esr_el1);
+	printf("ESR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ESR_EL2));
+
+	/* Pass FAR_EL1 to HPFAR_EL2 */
+	// asm volatile("msr HPFAR_EL2, %0" : :"r"(far_el1));
+	write_hpfar_el2(far_el1);
+	printf("FAR_EL1: %llx\n", far_el1);
+	printf("HPFAR_EL2: %lx\n", read_hpfar_el2());
 }
 #endif
 
@@ -499,6 +523,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 #else
 		cm_el1_sysregs_context_save(SECURE);
 		pass_el1_return_state_to_el2(titanium_ctx);
+		pass_el1_fault_state_to_el2(titanium_ctx);
 #endif
 
 		/* Get a reference to the non-secure context */
