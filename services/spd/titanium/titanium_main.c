@@ -31,6 +31,7 @@
 #include "titanium_private.h"
 #include "teesmc_titanium.h"
 #include "teesmc_titanium_macros.h"
+#include "titanium_vm_exit_defs.h"
 
 /*******************************************************************************
  * Address of the entrypoint vector table in TITANIUM. It is
@@ -308,40 +309,42 @@ static void pass_el2_return_state_to_el1(titanium_context_t *titanium_ctx) {
 	// printf("SPSR_EL2: %llx\n", spsr_el2);
 }
 
-static void pass_el1_return_state_to_el2(titanium_context_t *titanium_ctx) {
-	uint64_t elr_el1 = read_elr_el1();
-	uint64_t spsr_el1 = read_spsr_el1();
+// static void pass_el1_return_state_to_el2(titanium_context_t *titanium_ctx) {
+// 	uint64_t elr_el1 = read_elr_el1();
+// 	uint64_t spsr_el1 = read_spsr_el1();
 
-	/* Pass ELR_EL1 to ELR_EL2 */
-	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
-			CTX_ELR_EL2,
-			elr_el1);
-	// printf("ELR_EL1: %llx\n", elr_el1);
-	// printf("ELR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ELR_EL2));
+// 	/* Pass ELR_EL1 to ELR_EL2 */
+// 	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
+// 			CTX_ELR_EL2,
+// 			elr_el1);
 
-	/* Pass SPSR_EL1 to SPSR_EL2 */
-	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
-			CTX_SPSR_EL2,
-			spsr_el1);
-	// printf("SPSR_EL1: %llx\n", spsr_el1);
-	// printf("SPSR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_SPSR_EL2));
-}
+// 	/* Pass SPSR_EL1 to SPSR_EL2 */
+// 	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
+// 			CTX_SPSR_EL2,
+// 			spsr_el1);
+// }
 
 static void pass_el1_fault_state_to_el2(titanium_context_t *titanium_ctx) {
-	uint64_t esr_el1 = read_esr_el1();
-	uint64_t far_el1 = read_far_el1();
-
+	unsigned long esr_el1 = read_esr_el1();
+	unsigned long far_el1 = read_far_el1();
+	unsigned long hpfar_el2 = read_far_el1();
+    uint64_t kvm_exit_reason = ESR_EL_EC(esr_el1);
 	/* Pass ESR_EL1 to ESR_EL2 */
-	write_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx),
-			CTX_ESR_EL2,
-			esr_el1);
-	printf("ESR_EL1: %llx\n", esr_el1);
-	printf("ESR_EL2: %llx\n", read_ctx_reg(get_el2_sysregs_ctx(&titanium_ctx->cpu_ctx), CTX_ESR_EL2));
+    if (kvm_exit_reason == ESR_ELx_EC_IABT_CUR ||
+            kvm_exit_reason == ESR_ELx_EC_DABT_CUR) {
+		/* Change IABT/DABT_CUR to IABT/DABT_LOW.
+		 * Just clear EC bits[0], or ESR_EL bits[26]
+		 */
+		esr_el1 &= (~BIT(26));
+	}
+	write_esr_el2(esr_el1);
+	printf("ESR_EL1: %lx\n", esr_el1);
+	printf("ESR_EL2: %lx\n", read_esr_el2());
 
 	/* Pass FAR_EL1 to HPFAR_EL2 */
-	// asm volatile("msr HPFAR_EL2, %0" : :"r"(far_el1));
-	write_hpfar_el2(far_el1);
-	printf("FAR_EL1: %llx\n", far_el1);
+	hpfar_el2 = far_el1 >> 8;
+	write_hpfar_el2(hpfar_el2);
+	printf("FAR_EL1: %lx\n", far_el1);
 	printf("HPFAR_EL2: %lx\n", read_hpfar_el2());
 }
 #endif
@@ -399,6 +402,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			cm_el2_sysregs_context_save(NON_SECURE, 1);
 #else
 			cm_el1_sysregs_context_save(NON_SECURE);
+			cm_el2_sysregs_context_save(NON_SECURE, 1);
 #endif
 
 			icc_sre_el1 = (uint32_t)read_icc_sre_el1();
@@ -412,6 +416,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			cm_el2_sysregs_context_save(NON_SECURE, 0);
 #else
 			cm_el1_sysregs_context_save(NON_SECURE);
+			cm_el2_sysregs_context_save(NON_SECURE, 0);
 #endif
 		}
 
@@ -517,12 +522,13 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 	cm_set_sre_el1(NON_SECURE, 0);
 
 	if (is_kvm_trap == 1) {
+		printf("return from titanium, smc_imm: %d\n", smc_imm);
 
 #ifndef DISABLE_SEL2
 		cm_el2_sysregs_context_save(SECURE, 1);
 #else
 		cm_el1_sysregs_context_save(SECURE);
-		pass_el1_return_state_to_el2(titanium_ctx);
+		// pass_el1_return_state_to_el2(titanium_ctx);
 		pass_el1_fault_state_to_el2(titanium_ctx);
 #endif
 
