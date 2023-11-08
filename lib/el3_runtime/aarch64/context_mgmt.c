@@ -729,7 +729,6 @@ void cm_set_elr_el3(uint32_t security_state, uintptr_t entrypoint)
 	/* Populate EL3 state so that ERET jumps to the correct entry */
 	state = get_el3state_ctx(ctx);
 	write_ctx_reg(state, CTX_ELR_EL3, entrypoint);
-	printf("%s %lx\n", __func__, entrypoint);
 }
 
 /*******************************************************************************

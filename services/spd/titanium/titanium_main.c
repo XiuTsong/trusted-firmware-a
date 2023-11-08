@@ -522,7 +522,6 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 	cm_set_sre_el1(NON_SECURE, 0);
 
 	if (is_kvm_trap == 1) {
-		printf("return from titanium, smc_imm: %d\n", smc_imm);
 
 #ifndef DISABLE_SEL2
 		cm_el2_sysregs_context_save(SECURE, 1);
