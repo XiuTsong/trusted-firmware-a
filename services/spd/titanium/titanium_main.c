@@ -353,6 +353,8 @@ static void pass_el1_fault_state_to_el2(titanium_context_t *titanium_ctx) {
 
 long enter_titanium_count = 0;
 long leave_titanium_count = 0;
+static bool is_fixup_vttbr = 0;
+static u_register_t fixup_vttbr_elr_el3 = 0;
 /*******************************************************************************
  * This function is responsible for handling all SMCs in the Trusted OS/App
  * range from the non-secure state as defined in the SMC Calling Convention
@@ -442,8 +444,13 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		if (is_kvm_trap == 1) {
 			switch (smc_imm) {
 				case SMC_IMM_KVM_TO_TITANIUM_TRAP:
-					cm_set_elr_el3(SECURE, (uint64_t)
-						&titanium_vector_table->kvm_trap_smc_entry);
+					if (!is_fixup_vttbr) {
+						cm_set_elr_el3(SECURE, (uint64_t)
+							&titanium_vector_table->kvm_trap_smc_entry);
+					} else {
+						is_fixup_vttbr = 0;
+						cm_set_sre_el1(SECURE, fixup_vttbr_elr_el3);
+					}
 					break;
 				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_REGISTER:
 					cm_set_elr_el3(SECURE, (uint64_t)
@@ -556,6 +563,14 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			case SMC_IMM_TITANIUM_TO_KVM_SHARED_MEMORY:
 				//printf("jump away from save titanium registers\n");
 				//printf("jump away from redirect elr registers to vbar addr\n");
+				break;
+			case SMC_IMM_TITANIUM_TO_KVM_FIXUP_VTTBR:
+				asm volatile("mrs %0, elr_el3" : "=r" (fixup_vttbr_elr_el3));
+				printf("save fix_up elr_elr: %lx\n", fixup_vttbr_elr_el3);
+				exit_value = 0;
+				memcpy(get_gpregs_ctx(ns_cpu_context), get_gpregs_ctx(handle), sizeof(gp_regs_t));
+				cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_vbar_el2(NON_SECURE) + (8+exit_value) * 0x80);//skip the first eight handler
+				is_fixup_vttbr = 1;
 				break;
 			default:
 				panic();
