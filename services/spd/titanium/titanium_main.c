@@ -339,6 +339,13 @@ static void pass_el1_fault_state_to_el2(titanium_context_t *titanium_ctx) {
 		 */
 		esr_el1 &= (~BIT(26));
 	}
+	if (kvm_exit_reason == ESR_ELx_EC_SVC64) {
+		/* Change SVC64 to HVC64
+		 * Just clear ESR_EL2 bits[26], and set ESR_EL2 bits[27]
+		 */
+		esr_el1 &= (~BIT(26));
+		esr_el1 |= (BIT(27));
+	}
 	write_esr_el2(esr_el1);
 	printf("ESR_EL1: %lx\n", esr_el1);
 	printf("ESR_EL2: %lx\n", read_esr_el2());
