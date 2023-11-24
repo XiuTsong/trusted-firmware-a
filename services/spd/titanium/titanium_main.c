@@ -25,13 +25,17 @@
 #include <common/runtime_svc.h>
 #include <lib/el3_runtime/context_mgmt.h>
 #include <plat/common/platform.h>
+#include <stdint.h>
 #include <tools_share/uuid.h>
 
 #include "common/ep_info.h"
+#include "lib/xlat_tables/xlat_tables_defs.h"
 #include "titanium_private.h"
 #include "teesmc_titanium.h"
 #include "teesmc_titanium_macros.h"
 #include "titanium_vm_exit_defs.h"
+
+#include "sysreg.h"
 
 /*******************************************************************************
  * Address of the entrypoint vector table in TITANIUM. It is
@@ -331,32 +335,51 @@ static void pass_el1_fault_state_to_el2(titanium_context_t *titanium_ctx) {
 	unsigned long far_el1 = read_far_el1();
 	unsigned long hpfar_el2 = read_far_el1();
     uint64_t kvm_exit_reason = ESR_EL_EC(esr_el1);
+	// unsigned long fault_ipn = far_el1 >> PAGE_SIZE_SHIFT;
+
+	// printf("ESR_EL1: %lx\n", esr_el1);
 	/* Pass ESR_EL1 to ESR_EL2 */
     if (kvm_exit_reason == ESR_ELx_EC_IABT_CUR ||
             kvm_exit_reason == ESR_ELx_EC_DABT_CUR) {
 		/* Change IABT/DABT_CUR to IABT/DABT_LOW.
-		 * Just clear EC bits[0], or ESR_EL bits[26]
+		 * Clear EC bits[0], or ESR_EL bits[26]
 		 */
 		esr_el1 &= (~BIT(26));
 	}
 	if (kvm_exit_reason == ESR_ELx_EC_SVC64) {
-		/* Change SVC64 to HVC64
-		 * Just clear ESR_EL2 bits[26], and set ESR_EL2 bits[27]
-		 */
+		/* Change SVC64 to HVC64 */
 		esr_el1 &= (~BIT(26));
 		esr_el1 |= (BIT(27));
 	}
 	write_esr_el2(esr_el1);
-	printf("ESR_EL1: %lx\n", esr_el1);
-	printf("ESR_EL2: %lx\n", read_esr_el2());
+	// printf("ESR_EL2: %lx\n", read_esr_el2());
 
 	/* Pass FAR_EL1 to HPFAR_EL2 */
-	hpfar_el2 = far_el1 >> 8;
+	hpfar_el2 = (far_el1 >> 12) << 4;
 	write_hpfar_el2(hpfar_el2);
-	printf("FAR_EL1: %lx\n", far_el1);
-	printf("HPFAR_EL2: %lx\n", read_hpfar_el2());
+	/* Pass FAR_EL1 to FAR_EL2
+	 * FIXME: Does nvisor only need low 12-bit of FAR_EL2?
+	 */
+	write_far_el2(far_el1);
+	// printf("FAR_EL1: %lx\n", far_el1);
+	// printf("HPFAR_EL2: %lx\n", read_hpfar_el2());
 }
 #endif
+
+static inline uint64_t gic_read_iar(void)
+{
+	uint64_t irqstat;
+
+	irqstat = read_sysreg_s(SYS_ICC_IAR1_EL1);
+	dsb();
+	return irqstat;
+}
+
+static inline void gic_write_eoir(uint32_t irq)
+{
+	write_sysreg_s(irq, SYS_ICC_EOIR1_EL1);
+	isb();
+}
 
 long enter_titanium_count = 0;
 long leave_titanium_count = 0;
@@ -420,7 +443,12 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 			icc_sre_el1 &= ~(1UL);  //clear SRE bit
 //			write_icc_sre_el1(icc_sre_el1);
 			cm_set_sre_el1(SECURE, (uint64_t)icc_sre_el1);
-
+			// int irqnr;
+			// irqnr = gic_read_iar();
+			// printf("irqnr: %d\n", irqnr);
+			// if ((irqnr > 15 && irqnr < 1020)) {
+				// gic_write_eoir(26);
+			// }
 		} else {
 			cm_set_sre_el1(SECURE, 0);
 #ifndef DISABLE_SEL2
@@ -456,7 +484,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 							&titanium_vector_table->kvm_trap_smc_entry);
 					} else {
 						is_fixup_vttbr = 0;
-						cm_set_sre_el1(SECURE, fixup_vttbr_elr_el3);
+						cm_set_elr_el3(SECURE, fixup_vttbr_elr_el3);
 					}
 					break;
 				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_REGISTER:
@@ -527,6 +555,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 						CTX_GPREG_X7));
 
 		}
+
 		SMC_RET4(&titanium_ctx->cpu_ctx, smc_fid, x1, x2, x3);
 	}
 
@@ -573,7 +602,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 				break;
 			case SMC_IMM_TITANIUM_TO_KVM_FIXUP_VTTBR:
 				asm volatile("mrs %0, elr_el3" : "=r" (fixup_vttbr_elr_el3));
-				printf("save fix_up elr_elr: %lx\n", fixup_vttbr_elr_el3);
+				// printf("save fix_up elr_elr: %lx\n", fixup_vttbr_elr_el3);
 				exit_value = 0;
 				memcpy(get_gpregs_ctx(ns_cpu_context), get_gpregs_ctx(handle), sizeof(gp_regs_t));
 				cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_vbar_el2(NON_SECURE) + (8+exit_value) * 0x80);//skip the first eight handler
