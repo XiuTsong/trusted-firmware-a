@@ -381,10 +381,18 @@ static inline void gic_write_eoir(uint32_t irq)
 	isb();
 }
 
+void pass_ich_lr0_to_titanium(u_register_t ich_lr0_el2) {
+	/* el1-visor do not use ttbr1_el1 */
+	write_ttbr1_el1(ich_lr0_el2);
+	/* Clear ich_lr0_el2 to prevent repeated injection of virtual irq */
+	// write_sysreg_s(SYS_ICH_LR0_EL2, 0);
+}
+
 long enter_titanium_count = 0;
 long leave_titanium_count = 0;
 static bool is_fixup_vttbr = 0;
 static u_register_t fixup_vttbr_elr_el3 = 0;
+static u_register_t hcr_el2;
 /*******************************************************************************
  * This function is responsible for handling all SMCs in the Trusted OS/App
  * range from the non-secure state as defined in the SMC Calling Convention
@@ -430,33 +438,22 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		 */
 		assert(handle == cm_get_context(NON_SECURE));
 
+		hcr_el2 = read_hcr_el2();
+
 		if (is_kvm_trap == 1) {
 
-#ifndef DISABLE_SEL2
-			cm_el2_sysregs_context_save(NON_SECURE, 1);
-#else
 			cm_el1_sysregs_context_save(NON_SECURE);
 			cm_el2_sysregs_context_save(NON_SECURE, 1);
-#endif
 
 			icc_sre_el1 = (uint32_t)read_icc_sre_el1();
 			icc_sre_el1 &= ~(1UL);  //clear SRE bit
 //			write_icc_sre_el1(icc_sre_el1);
 			cm_set_sre_el1(SECURE, (uint64_t)icc_sre_el1);
-			// int irqnr;
-			// irqnr = gic_read_iar();
-			// printf("irqnr: %d\n", irqnr);
-			// if ((irqnr > 15 && irqnr < 1020)) {
-				// gic_write_eoir(26);
-			// }
+			
 		} else {
 			cm_set_sre_el1(SECURE, 0);
-#ifndef DISABLE_SEL2
-			cm_el2_sysregs_context_save(NON_SECURE, 0);
-#else
 			cm_el1_sysregs_context_save(NON_SECURE);
 			cm_el2_sysregs_context_save(NON_SECURE, 0);
-#endif
 		}
 
 		/*
@@ -506,18 +503,10 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 					&titanium_vector_table->yield_smc_entry);
 		}
 
-#ifndef DISABLE_SEL2
-		if (is_kvm_trap == 1) {
-			cm_el2_sysregs_context_restore(SECURE, 1);
-		} else {
-			cm_el2_sysregs_context_restore(SECURE, 0);
-		}
-#else
 		if (smc_imm == SMC_IMM_KVM_TO_TITANIUM_TRAP) {
 			pass_el2_return_state_to_el1(titanium_ctx);
 		}
 		cm_el1_sysregs_context_restore(SECURE);
-#endif
 
 		cm_set_next_eret_context(SECURE);
 
@@ -534,6 +523,15 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 					panic();
 			}
 
+			write_hcr_el2(0); // disable s-el2
+
+			unsigned long ich_lr0_el2 = read_sysreg_s(SYS_ICH_LR0_EL2);
+			if (ich_lr0_el2 != 0) {
+				printf("ich_lr0_el2: %lx\n", ich_lr0_el2);
+				pass_ich_lr0_to_titanium(ich_lr0_el2);
+			} else {
+				write_ttbr1_el1(0);
+			}
 			SMC_RET0(&titanium_ctx->cpu_ctx);
 		} else {
 			write_ctx_reg(get_gpregs_ctx(&titanium_ctx->cpu_ctx),
@@ -568,13 +566,9 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 
 	if (is_kvm_trap == 1) {
 
-#ifndef DISABLE_SEL2
-		cm_el2_sysregs_context_save(SECURE, 1);
-#else
 		cm_el1_sysregs_context_save(SECURE);
 		pass_el1_return_state_to_el2(titanium_ctx);
 		pass_el1_fault_state_to_el2(titanium_ctx);
-#endif
 
 		/* Get a reference to the non-secure context */
 		ns_cpu_context = cm_get_context(NON_SECURE);
@@ -584,12 +578,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		cm_set_sre_el1(NON_SECURE, 0);
 
 		/* Restore non-secure state */
-
-#ifndef DISABLE_SEL2
-		cm_el2_sysregs_context_restore(NON_SECURE, 1);
-#else
 		cm_el1_sysregs_context_restore(NON_SECURE);
-#endif
 		cm_set_next_eret_context(NON_SECURE);
 		switch (smc_imm) {
 			case SMC_IMM_TITANIUM_TO_KVM_TRAP_SYNC: case SMC_IMM_TITANIUM_TO_KVM_TRAP_IRQ:
@@ -612,7 +601,8 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 				panic();
 		}
 
-//		cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_elr_el3(NON_SECURE));
+		/* Restore hcr_el2 for normal world */
+		write_hcr_el2(hcr_el2);
 		SMC_RET0(ns_cpu_context);
 	}
 
