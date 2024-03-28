@@ -525,13 +525,6 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 
 			write_hcr_el2(0); // disable s-el2
 
-			unsigned long ich_lr0_el2 = read_sysreg_s(SYS_ICH_LR0_EL2);
-			if (ich_lr0_el2 != 0) {
-				printf("ich_lr0_el2: %lx\n", ich_lr0_el2);
-				pass_ich_lr0_to_titanium(ich_lr0_el2);
-			} else {
-				write_ttbr1_el1(0);
-			}
 			SMC_RET0(&titanium_ctx->cpu_ctx);
 		} else {
 			write_ctx_reg(get_gpregs_ctx(&titanium_ctx->cpu_ctx),
