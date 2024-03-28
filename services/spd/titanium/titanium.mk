@@ -16,4 +16,5 @@ SPD_SOURCES		:=	services/spd/titanium/titanium_common.c	\
 NEED_BL32		:=	yes
 
 # required so that optee code can control access to the timer registers
-NS_TIMER_SWITCH		:=	1
+# NS_TIMER_SWITCH		:=	1
+NS_TIMER_SWITCH		:=	0
