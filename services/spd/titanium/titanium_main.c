@@ -390,9 +390,9 @@ void pass_ich_lr0_to_titanium(u_register_t ich_lr0_el2) {
 
 long enter_titanium_count = 0;
 long leave_titanium_count = 0;
-static bool is_fixup_vttbr = 0;
-static u_register_t fixup_vttbr_elr_el3 = 0;
-static u_register_t hcr_el2;
+static bool is_fixup_vttbr[TITANIUM_CORE_COUNT];
+static u_register_t fixup_vttbr_elr_el3[TITANIUM_CORE_COUNT];
+static u_register_t hcr_el2[TITANIUM_CORE_COUNT];
 /*******************************************************************************
  * This function is responsible for handling all SMCs in the Trusted OS/App
  * range from the non-secure state as defined in the SMC Calling Convention
@@ -438,7 +438,7 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		 */
 		assert(handle == cm_get_context(NON_SECURE));
 
-		hcr_el2 = read_hcr_el2();
+		hcr_el2[linear_id] = read_hcr_el2();
 
 		if (is_kvm_trap == 1) {
 
@@ -476,12 +476,12 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 		if (is_kvm_trap == 1) {
 			switch (smc_imm) {
 				case SMC_IMM_KVM_TO_TITANIUM_TRAP:
-					if (!is_fixup_vttbr) {
+					if (!is_fixup_vttbr[linear_id]) {
 						cm_set_elr_el3(SECURE, (uint64_t)
 							&titanium_vector_table->kvm_trap_smc_entry);
 					} else {
-						is_fixup_vttbr = 0;
-						cm_set_elr_el3(SECURE, fixup_vttbr_elr_el3);
+						is_fixup_vttbr[linear_id] = 0;
+						cm_set_elr_el3(SECURE, fixup_vttbr_elr_el3[linear_id]);
 					}
 					break;
 				case SMC_IMM_KVM_TO_TITANIUM_SHARED_MEMORY_REGISTER:
@@ -583,19 +583,19 @@ static uintptr_t titanium_smc_handler(uint32_t smc_fid,
 				//printf("jump away from redirect elr registers to vbar addr\n");
 				break;
 			case SMC_IMM_TITANIUM_TO_KVM_FIXUP_VTTBR:
-				asm volatile("mrs %0, elr_el3" : "=r" (fixup_vttbr_elr_el3));
+				asm volatile("mrs %0, elr_el3" : "=r" (fixup_vttbr_elr_el3[linear_id]));
 				// printf("save fix_up elr_elr: %lx\n", fixup_vttbr_elr_el3);
 				exit_value = 0;
 				memcpy(get_gpregs_ctx(ns_cpu_context), get_gpregs_ctx(handle), sizeof(gp_regs_t));
 				cm_set_elr_el3(NON_SECURE, (uint64_t)cm_get_vbar_el2(NON_SECURE) + (8+exit_value) * 0x80);//skip the first eight handler
-				is_fixup_vttbr = 1;
+				is_fixup_vttbr[linear_id] = 1;
 				break;
 			default:
 				panic();
 		}
 
 		/* Restore hcr_el2 for normal world */
-		write_hcr_el2(hcr_el2);
+		write_hcr_el2(hcr_el2[linear_id]);
 		SMC_RET0(ns_cpu_context);
 	}
 
